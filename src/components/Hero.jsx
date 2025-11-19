@@ -4,13 +4,15 @@ import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 const LazySpline = lazy(() => import('@splinetool/react-spline'))
 
 const DEFAULT_SCENE = 'https://prod.spline.design/WIYQqZ5jGk2v2eG8/scene.splinecode'
-const SCENE_URL = import.meta.env.VITE_SPLINE_SCENE_URL || DEFAULT_SCENE
+const PRIMARY_SCENE = import.meta.env.VITE_SPLINE_SCENE_URL || DEFAULT_SCENE
+const SECONDARY_SCENE = import.meta.env.VITE_SPLINE_SCENE_FALLBACK || ''
 
 function Hero() {
   const containerRef = useRef(null)
   const [inView, setInView] = useState(false)
   const [canShow3D, setCanShow3D] = useState(false)
   const [failed3D, setFailed3D] = useState(false)
+  const [activeScene, setActiveScene] = useState(PRIMARY_SCENE)
 
   // Observe when hero enters viewport (for lazy loading)
   useEffect(() => {
@@ -34,12 +36,32 @@ function Hero() {
     let cancelled = false
     const controller = new AbortController()
 
+    async function tryFetch(url) {
+      const res = await fetch(url, { method: 'GET', cache: 'no-store', signal: controller.signal })
+      if (!res.ok) throw new Error(`Scene fetch failed: ${res.status}`)
+      return true
+    }
+
     async function checkSceneAndEnable() {
       try {
-        const res = await fetch(SCENE_URL, { method: 'GET', cache: 'no-store', signal: controller.signal })
-        if (!res.ok) throw new Error(`Scene fetch failed: ${res.status}`)
-        if (!cancelled) setCanShow3D(true)
-      } catch (_err) {
+        await tryFetch(PRIMARY_SCENE)
+        if (!cancelled) {
+          setActiveScene(PRIMARY_SCENE)
+          setCanShow3D(true)
+        }
+      } catch (_e1) {
+        if (SECONDARY_SCENE) {
+          try {
+            await tryFetch(SECONDARY_SCENE)
+            if (!cancelled) {
+              setActiveScene(SECONDARY_SCENE)
+              setCanShow3D(true)
+            }
+            return
+          } catch (_e2) {
+            // fall through to fail
+          }
+        }
         if (!cancelled) setFailed3D(true)
       }
     }
@@ -74,7 +96,7 @@ function Hero() {
       {inView && canShow3D && !failed3D && (
         <div className="absolute inset-0 -z-0">
           <Suspense fallback={null}>
-            <LazySpline scene={SCENE_URL} />
+            <LazySpline scene={activeScene} />
           </Suspense>
         </div>
       )}
@@ -123,8 +145,22 @@ function Hero() {
             </div>
 
             {failed3D && (
-              <div className="mt-6 text-sm text-white/60">
-                3D preview is unavailable right now. The experience still looks great without it.
+              <div className="mt-6 text-sm text-white/70 space-y-2">
+                <div>3D preview is unavailable right now. The experience still looks great without it.</div>
+                <div>
+                  Current scene URL: {' '}
+                  <a className="underline text-white" href={PRIMARY_SCENE} target="_blank" rel="noreferrer">
+                    {PRIMARY_SCENE}
+                  </a>
+                </div>
+                {SECONDARY_SCENE && (
+                  <div>
+                    Fallback scene URL: {' '}
+                    <a className="underline text-white" href={SECONDARY_SCENE} target="_blank" rel="noreferrer">
+                      {SECONDARY_SCENE}
+                    </a>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -137,7 +173,7 @@ function Hero() {
       {/* Small helper badge to access the current scene URL */}
       <div className="pointer-events-auto absolute right-4 top-4 z-20">
         <a
-          href={SCENE_URL}
+          href={activeScene}
           target="_blank"
           rel="noreferrer"
           className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs text-white hover:bg-white/20 backdrop-blur"
