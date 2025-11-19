@@ -3,7 +3,8 @@ import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 // Lazy-load Spline so it doesn't block initial paint and to avoid crashing when the scene is unavailable
 const LazySpline = lazy(() => import('@splinetool/react-spline'))
 
-const SCENE_URL = 'https://prod.spline.design/WIYQqZ5jGk2v2eG8/scene.splinecode'
+const DEFAULT_SCENE = 'https://prod.spline.design/WIYQqZ5jGk2v2eG8/scene.splinecode'
+const SCENE_URL = import.meta.env.VITE_SPLINE_SCENE_URL || DEFAULT_SCENE
 
 function Hero() {
   const containerRef = useRef(null)
@@ -131,6 +132,18 @@ function Hero() {
 
         {/* Bottom gradient */}
         <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-40 bg-gradient-to-t from-slate-950" />
+      </div>
+
+      {/* Small helper badge to access the current scene URL */}
+      <div className="pointer-events-auto absolute right-4 top-4 z-20">
+        <a
+          href={SCENE_URL}
+          target="_blank"
+          rel="noreferrer"
+          className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs text-white hover:bg-white/20 backdrop-blur"
+        >
+          Open 3D Scene
+        </a>
       </div>
     </section>
   )
