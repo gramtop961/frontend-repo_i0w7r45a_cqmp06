@@ -1,11 +1,148 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { Canvas } from '@react-three/fiber'
+import { OrbitControls, Environment, Float, Cloud, Stars } from '@react-three/drei'
 
-// Lazy-load Spline so it doesn't block initial paint and to avoid crashing when the scene is unavailable
+// Keep Spline as optional lazy chunk, but we'll prefer a Three.js scene by default
 const LazySpline = lazy(() => import('@splinetool/react-spline'))
 
-const DEFAULT_SCENE = 'https://prod.spline.design/WIYQqZ5jGk2v2eG8/scene.splinecode'
-const PRIMARY_SCENE = import.meta.env.VITE_SPLINE_SCENE_URL || DEFAULT_SCENE
+const DEFAULT_SPLINE = 'https://prod.spline.design/WIYQqZ5jGk2v2eG8/scene.splinecode'
+const PRIMARY_SCENE = import.meta.env.VITE_SPLINE_SCENE_URL || DEFAULT_SPLINE
 const SECONDARY_SCENE = import.meta.env.VITE_SPLINE_SCENE_FALLBACK || ''
+
+function Helicopter(props) {
+  // Simple stylized helicopter using basic geometry to avoid external assets
+  // Body
+  return (
+    <group {...props}>
+      <Float speed={1.2} rotationIntensity={0.15} floatIntensity={0.6}>
+        <group>
+          <mesh castShadow position={[0, 0, 0]}>
+            <capsuleGeometry args={[0.45, 1.6, 12, 24]} />
+            <meshStandardMaterial color="#8fb7ff" metalness={0.4} roughness={0.35} />
+          </mesh>
+
+          {/* Skids */}
+          <mesh position={[0.5, -0.6, 0]}>
+            <cylinderGeometry args={[0.03, 0.03, 1.4, 12]} />
+            <meshStandardMaterial color="#dbeafe" metalness={0.1} roughness={0.8} />
+          </mesh>
+          <mesh position={[-0.5, -0.6, 0]}>
+            <cylinderGeometry args={[0.03, 0.03, 1.4, 12]} />
+            <meshStandardMaterial color="#dbeafe" metalness={0.1} roughness={0.8} />
+          </mesh>
+
+          {/* Tail boom */}
+          <mesh position={[0, 0.05, -1.15]} rotation={[0.05, 0, 0]}>
+            <cylinderGeometry args={[0.08, 0.05, 1.4, 16]} />
+            <meshStandardMaterial color="#93c5fd" metalness={0.3} roughness={0.5} />
+          </mesh>
+
+          {/* Main rotor mast */}
+          <mesh position={[0, 0.65, 0]}>
+            <cylinderGeometry args={[0.03, 0.03, 0.4, 12]} />
+            <meshStandardMaterial color="#64748b" />
+          </mesh>
+
+          {/* Main rotor blades */}
+          <SpinningRotor />
+
+          {/* Tail rotor */}
+          <group position={[0, 0.1, -1.85]}>
+            <SpinningTailRotor />
+          </group>
+        </group>
+      </Float>
+    </group>
+  )
+}
+
+function SpinningRotor() {
+  const [t, setT] = useState(0)
+  useEffect(() => {
+    let raf
+    const loop = (time) => {
+      setT(time)
+      raf = requestAnimationFrame(loop)
+    }
+    raf = requestAnimationFrame(loop)
+    return () => cancelAnimationFrame(raf)
+  }, [])
+  const rot = (t / 1000) * 12.0
+  return (
+    <group rotation={[0, rot, 0]} position={[0, 0.85, 0]}>
+      <mesh rotation={[0, 0, Math.PI / 2]}>
+        <boxGeometry args={[0.06, 2.6, 0.02]} />
+        <meshStandardMaterial color="#e2e8f0" metalness={0.2} roughness={0.4} />
+      </mesh>
+      <mesh rotation={[0, 0, -Math.PI / 2]}>
+        <boxGeometry args={[0.06, 2.6, 0.02]} />
+        <meshStandardMaterial color="#e2e8f0" metalness={0.2} roughness={0.4} />
+      </mesh>
+    </group>
+  )
+}
+
+function SpinningTailRotor() {
+  const [t, setT] = useState(0)
+  useEffect(() => {
+    let raf
+    const loop = (time) => {
+      setT(time)
+      raf = requestAnimationFrame(loop)
+    }
+    raf = requestAnimationFrame(loop)
+    return () => cancelAnimationFrame(raf)
+  }, [])
+  const rot = (t / 1000) * 16.0
+  return (
+    <group rotation={[0, 0, rot]}>
+      <mesh>
+        <boxGeometry args={[0.02, 0.55, 0.02]} />
+        <meshStandardMaterial color="#e2e8f0" />
+      </mesh>
+      <mesh rotation={[0, 0, Math.PI / 2]}>
+        <boxGeometry args={[0.02, 0.55, 0.02]} />
+        <meshStandardMaterial color="#e2e8f0" />
+      </mesh>
+    </group>
+  )
+}
+
+function CloudField() {
+  return (
+    <group>
+      <Stars radius={80} depth={50} count={2000} factor={3} saturation={0} fade speed={0.8} />
+      <Cloud position={[-6, -2, -6]} speed={0.2} opacity={0.4} scale={7} />
+      <Cloud position={[6, -3, -4]} speed={0.15} opacity={0.35} scale={6} />
+      <Cloud position={[0, -4, -10]} speed={0.18} opacity={0.45} scale={9} />
+    </group>
+  )
+}
+
+function ThreeScene() {
+  return (
+    <Canvas camera={{ position: [4, 2.2, 4.5], fov: 50 }} shadows>
+      <color attach="background" args={["#07121f"]} />
+      <fog attach="fog" args={["#07121f", 10, 45]} />
+
+      <hemisphereLight intensity={0.6} groundColor={"#0b1220"} color={"#a0c4ff"} />
+      <directionalLight position={[5, 8, 5]} intensity={1.2} castShadow shadow-mapSize-width={1024} shadow-mapSize-height={1024} />
+
+      <Environment preset="sunset" />
+      <CloudField />
+
+      {/* Soft ground plane for subtle contact shadows */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.9, 0]} receiveShadow>
+        <planeGeometry args={[200, 200]} />
+        <shadowMaterial opacity={0.25} />
+      </mesh>
+
+      <Helicopter position={[0, 0, 0]} />
+
+      <OrbitControls enablePan={false} enableZoom={false} minPolarAngle={Math.PI / 3.5} maxPolarAngle={Math.PI / 2.1} />
+    </Canvas>
+  )
+}
 
 function Hero() {
   const containerRef = useRef(null)
@@ -29,7 +166,7 @@ function Hero() {
     return () => obs.disconnect()
   }, [])
 
-  // Before mounting the 3D component, verify the scene is accessible to avoid runtime crashes
+  // Try Spline first only if user provided a public URL; otherwise fall back to Three.js immediately
   useEffect(() => {
     if (!inView || canShow3D || failed3D) return
 
@@ -43,6 +180,12 @@ function Hero() {
     }
 
     async function checkSceneAndEnable() {
+      // If env not set or default (likely blocked), skip to Three.js scene
+      const userProvided = import.meta.env.VITE_SPLINE_SCENE_URL || import.meta.env.VITE_SPLINE_SCENE_FALLBACK
+      if (!userProvided) {
+        if (!cancelled) setFailed3D(true) // mark Spline as failed to show the info block
+        return
+      }
       try {
         await tryFetch(PRIMARY_SCENE)
         if (!cancelled) {
@@ -58,9 +201,7 @@ function Hero() {
               setCanShow3D(true)
             }
             return
-          } catch (_e2) {
-            // fall through to fail
-          }
+          } catch (_e2) {}
         }
         if (!cancelled) setFailed3D(true)
       }
@@ -84,6 +225,8 @@ function Hero() {
     []
   )
 
+  const shouldShowSpline = inView && canShow3D && !failed3D
+
   return (
     <section
       ref={containerRef}
@@ -92,14 +235,16 @@ function Hero() {
       {/* Background cloud layers */}
       {FallbackClouds}
 
-      {/* 3D scene (only if fetch succeeds) */}
-      {inView && canShow3D && !failed3D && (
-        <div className="absolute inset-0 -z-0">
+      {/* Prefer Three.js scene; show Spline only if an allowed public URL passes checks */}
+      <div className="absolute inset-0 -z-0">
+        {shouldShowSpline ? (
           <Suspense fallback={null}>
             <LazySpline scene={activeScene} />
           </Suspense>
-        </div>
-      )}
+        ) : (
+          <ThreeScene />
+        )}
+      </div>
 
       {/* Content overlay */}
       <div className="relative z-10 pt-40 pb-24">
@@ -146,13 +291,15 @@ function Hero() {
 
             {failed3D && (
               <div className="mt-6 text-sm text-white/70 space-y-2">
-                <div>3D preview is unavailable right now. The experience still looks great without it.</div>
-                <div>
-                  Current scene URL: {' '}
-                  <a className="underline text-white" href={PRIMARY_SCENE} target="_blank" rel="noreferrer">
-                    {PRIMARY_SCENE}
-                  </a>
-                </div>
+                <div>Public Spline scene was unavailable. Showing in-app 3D instead.</div>
+                {PRIMARY_SCENE && (
+                  <div>
+                    Current scene URL: {' '}
+                    <a className="underline text-white" href={PRIMARY_SCENE} target="_blank" rel="noreferrer">
+                      {PRIMARY_SCENE}
+                    </a>
+                  </div>
+                )}
                 {SECONDARY_SCENE && (
                   <div>
                     Fallback scene URL: {' '}
